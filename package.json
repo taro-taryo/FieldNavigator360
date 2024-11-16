@@ -1,0 +1,20 @@
+{
+  "name": "field-navigator",
+  "version": "1.0.0",
+  "description": "Real-time field navigator with WebSocket and camera streaming.",
+  "main": "server/app/server.js",
+  "scripts": {
+    "start": "node server/app/server.js",
+    "start:dev": "nodemon server/app/server.js --watch server",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["websocket", "camera", "real-time"],
+  "author": "taro-taryo",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
+}
