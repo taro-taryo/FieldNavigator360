@@ -33,11 +33,24 @@ export default class Encoder {
         console.log('[Encoder] Configured:', { width, height, bitrate, framerate });
     }
 
-    processFrame() {
+    processFrameWithPointer(pointerPosition, video) {
         if (!this.encoder) return [];
 
         try {
-            this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
+            // カメラ映像をキャンバスに描画
+            this.ctx.drawImage(video, 0, 0, this.canvas.width, this.canvas.height);
+
+            // ポインタをキャンバスに描画
+            if (pointerPosition) {
+                const canvasX = pointerPosition.x * this.canvas.width;
+                const canvasY = pointerPosition.y * this.canvas.height;
+
+                this.ctx.beginPath();
+                this.ctx.arc(canvasX, canvasY, 10, 0, 2 * Math.PI);
+                this.ctx.fillStyle = 'red'; // iPhoneで合成したポインタの色は赤
+                this.ctx.fill();
+            }
+
             const frame = new VideoFrame(this.canvas, { timestamp: performance.now() });
             const isIDR = this.shouldGenerateIDR();
 
@@ -59,10 +72,10 @@ export default class Encoder {
 
     processNALUnits(data) {
         const nalUnits = this.splitNALUnits(data);
-    
+
         for (const nalUnit of nalUnits) {
             const nalType = nalUnit[0] & 0x1f;
-    
+
             switch (nalType) {
                 case 7: // SPS
                     this.sps = nalUnit;
@@ -76,20 +89,15 @@ export default class Encoder {
                     this.storeEncodedFrame(this.concatNALUnits([this.sps, this.pps, nalUnit]));
                     break;
                 case 1: // nonIDR
-                    // 非IDRフレームにもSPS/PPSを強制的に付与
                     if (this.sps && this.pps) {
                         this.storeEncodedFrame(this.concatNALUnits([this.sps, this.pps, nalUnit]));
-                    } else {
-                        console.warn('Skipping nonIDR frame due to missing SPS/PPS');
                     }
                     break;
                 default:
-                    console.log('Discarded non-relevant NAL unit:', nalType);
                     break;
             }
         }
     }
-    
 
     splitNALUnits(data) {
         const units = [];

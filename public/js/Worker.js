@@ -12,6 +12,8 @@ class Worker {
         this.wsManager = null;
         this.pointerManager = null;
 
+        this.pointerPosition = { x: 0, y: 0 }; // ポインタ位置を追跡
+
         this.orientation = this.getOrientation();
         this.init();
     }
@@ -20,6 +22,7 @@ class Worker {
         this.wsManager = new WebSocketManager(`wss://${location.host}`, 'worker', (data) => {
             if (data.type === 'pointer') {
                 this.pointerManager.updatePointer(data.x, data.y);
+                this.pointerPosition = { x: data.x, y: data.y }; // ポインタ位置を更新
             }
         });
 
@@ -35,7 +38,7 @@ class Worker {
             });
 
             this.video.srcObject = stream;
-            this.video.style.display = 'block';
+            this.video.style.display = 'block'; // カメラ映像を表示
             this.startButton.style.display = 'none';
 
             this.setupCanvasAndEncoder(stream);
@@ -80,7 +83,7 @@ class Worker {
 
     startProcessingFrames() {
         const process = () => {
-            const frames = this.encoder.processFrame();
+            const frames = this.encoder.processFrameWithPointer(this.pointerPosition, this.video);
             frames.forEach((frame) => {
                 if (this.wsManager.ws.readyState === WebSocket.OPEN) {
                     this.wsManager.ws.send(frame);
