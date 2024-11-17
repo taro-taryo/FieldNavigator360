@@ -22,22 +22,13 @@ export default class WebSocketManager {
             }
         });
 
-        this.ws.addEventListener('close', () => {
-            console.log(`[WebSocketManager] Connection closed for ${this.role}`);
-        });
-
-        this.ws.addEventListener('error', (error) => {
-            console.error('[WebSocketManager] Connection error:', error);
-        });
+        this.ws.addEventListener('close', () => console.log(`[WebSocketManager] Connection closed for ${this.role}`));
+        this.ws.addEventListener('error', (error) => console.error('[WebSocketManager] Connection error:', error));
     }
 
     async parseMessage(event) {
-        if (typeof event.data === 'string') {
-            return JSON.parse(event.data);
-        } else if (event.data instanceof Blob) {
-            const buffer = await event.data.arrayBuffer();
-            return new Uint8Array(buffer);
-        }
+        if (typeof event.data === 'string') return JSON.parse(event.data);
+        if (event.data instanceof Blob) return new Uint8Array(await event.data.arrayBuffer());
         throw new Error('[WebSocketManager] Unsupported message type');
     }
 
