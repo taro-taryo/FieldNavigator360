@@ -1,7 +1,7 @@
 const clients = new Map();
 
 function handleWebSocket(ws) {
-    console.log('WebSocket connection established');
+    console.log('[WebSocket] New connection established');
 
     ws.on('message', (message, isBinary) => {
         try {
@@ -9,14 +9,17 @@ function handleWebSocket(ws) {
                 const operator = clients.get('operator');
                 if (operator) {
                     operator.send(message);
-                    console.log('Binary message relayed to operator');
+                    console.log('[WebSocket] Binary message relayed to operator');
+                } else {
+                    console.log('[WebSocket] Operator is not connected');
                 }
             } else {
                 const data = JSON.parse(message.toString());
+                console.log('[WebSocket] Received message:', data);
 
                 if (data.type === 'register') {
                     clients.set(data.role, ws);
-                    console.log(`${data.role} registered`);
+                    console.log(`[WebSocket] ${data.role} registered`);
                 }
 
                 if (data.type === 'pointer' && data.role === 'operator') {
@@ -27,12 +30,14 @@ function handleWebSocket(ws) {
                             x: data.x,
                             y: data.y,
                         }));
-                        console.log('Pointer message relayed to worker:', data);
+                        console.log('[WebSocket] Pointer message relayed to worker:', data);
+                    } else {
+                        console.log('[WebSocket] Worker is not connected');
                     }
                 }
             }
         } catch (error) {
-            console.error('Error handling WebSocket message:', error.message);
+            console.error('[WebSocket] Error handling message:', error.message);
         }
     });
 
@@ -40,7 +45,7 @@ function handleWebSocket(ws) {
         for (const [role, client] of clients.entries()) {
             if (client === ws) {
                 clients.delete(role);
-                console.log(`${role} disconnected`);
+                console.log(`[WebSocket] ${role} disconnected`);
             }
         }
     });

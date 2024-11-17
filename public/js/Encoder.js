@@ -3,11 +3,11 @@ export default class Encoder {
         this.canvas = canvas;
         this.video = video;
         this.ctx = canvas.getContext('2d');
+        this.encoder = this.initializeEncoder();
+        this.frameCount = 0;
         this.sps = null;
         this.pps = null;
-        this.frameCount = 0;
-
-        this.encoder = this.initializeEncoder();
+        this.encodedFrames = [];
     }
 
     initializeEncoder() {
@@ -17,7 +17,7 @@ export default class Encoder {
 
         return new VideoEncoder({
             output: this.handleEncodedChunk.bind(this),
-            error: (e) => console.error('Encoding error:', e),
+            error: (e) => console.error('[Encoder] Encoding error:', e),
         });
     }
 
@@ -30,7 +30,7 @@ export default class Encoder {
             framerate,
             avc: { format: 'annexb' },
         });
-        console.log('VideoEncoder configured:', { width, height, bitrate, framerate });
+        console.log('[Encoder] Configured:', { width, height, bitrate, framerate });
     }
 
     processFrame() {
@@ -39,54 +39,39 @@ export default class Encoder {
         try {
             this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
             const frame = new VideoFrame(this.canvas, { timestamp: performance.now() });
-
             const isIDR = this.shouldGenerateIDR();
+
             this.encoder.encode(frame, { keyFrame: isIDR });
             frame.close();
             this.frameCount++;
         } catch (error) {
-            console.error('Error during frame processing:', error);
+            console.error('[Encoder] Error during frame processing:', error);
         }
 
-        return this.getEncodedFrames();
+        return this.retrieveEncodedFrames();
     }
 
     handleEncodedChunk(chunk) {
         const data = new Uint8Array(chunk.byteLength);
         chunk.copyTo(data.buffer);
-
         this.processNALUnits(data);
     }
 
     processNALUnits(data) {
-        const nalUnits = this.splitNALUnits(data);
+        const units = this.splitNALUnits(data);
+        units.forEach((unit) => {
+            const nalType = unit[0] & 0x1f;
 
-        for (const nalUnit of nalUnits) {
-            const nalType = nalUnit[0] & 0x1f;
-
-            switch (nalType) {
-                case 7: // SPS
-                    this.sps = nalUnit;
-                    console.log('SPS updated.');
-                    break;
-                case 8: // PPS
-                    this.pps = nalUnit;
-                    console.log('PPS updated.');
-                    break;
-                case 5: // IDR
-                    if (this.sps && this.pps) {
-                        const combined = this.concatNALUnits([this.sps, this.pps, nalUnit]);
-                        this.storeEncodedFrame(combined);
-                    }
-                    break;
-                case 1: // nonIDR
-                    this.storeEncodedFrame(nalUnit);
-                    break;
-                default:
-                    console.log('Discarded non-relevant NAL unit:', nalType);
-                    break;
+            if (nalType === 7) {
+                this.sps = unit;
+            } else if (nalType === 8) {
+                this.pps = unit;
+            } else if (nalType === 5) {
+                this.storeEncodedFrame(this.concatNALUnits([this.sps, this.pps, unit]));
+            } else if (nalType === 1) {
+                this.storeEncodedFrame(unit);
             }
-        }
+        });
     }
 
     splitNALUnits(data) {
@@ -98,13 +83,8 @@ export default class Encoder {
             if (startCodeIndex < 0) break;
 
             const nextStartCodeIndex = this.findStartCode(data, startCodeIndex + 4);
-            if (nextStartCodeIndex < 0) {
-                units.push(data.subarray(startCodeIndex + 4));
-                break;
-            }
-
-            units.push(data.subarray(startCodeIndex + 4, nextStartCodeIndex));
-            offset = nextStartCodeIndex;
+            units.push(data.subarray(startCodeIndex + 4, nextStartCodeIndex < 0 ? data.length : nextStartCodeIndex));
+            offset = nextStartCodeIndex < 0 ? data.length : nextStartCodeIndex;
         }
 
         return units;
@@ -112,15 +92,7 @@ export default class Encoder {
 
     findStartCode(data, start) {
         for (let i = start; i < data.length - 3; i++) {
-            if (data[i] === 0x00 && data[i + 1] === 0x00 && data[i + 2] === 0x01) {
-                return i;
-            }
-            if (
-                data[i] === 0x00 &&
-                data[i + 1] === 0x00 &&
-                data[i + 2] === 0x00 &&
-                data[i + 3] === 0x01
-            ) {
+            if (data[i] === 0x00 && data[i + 1] === 0x00 && (data[i + 2] === 0x01 || data[i + 3] === 0x01)) {
                 return i;
             }
         }
@@ -148,14 +120,11 @@ export default class Encoder {
     }
 
     storeEncodedFrame(frame) {
-        if (!this.encodedFrames) {
-            this.encodedFrames = [];
-        }
         this.encodedFrames.push(frame);
     }
 
-    getEncodedFrames() {
-        const frames = this.encodedFrames || [];
+    retrieveEncodedFrames() {
+        const frames = this.encodedFrames;
         this.encodedFrames = [];
         return frames;
     }

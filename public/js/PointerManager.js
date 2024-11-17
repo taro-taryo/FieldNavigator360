@@ -10,7 +10,12 @@ export default class PointerManager {
         this.pointerElement.style.top = `${y * rect.height}px`;
         this.pointerElement.style.display = 'block';
 
-        setTimeout(() => {
+        this.hidePointerWithDelay();
+    }
+
+    hidePointerWithDelay() {
+        clearTimeout(this.hideTimeout);
+        this.hideTimeout = setTimeout(() => {
             this.pointerElement.style.display = 'none';
         }, 500);
     }
