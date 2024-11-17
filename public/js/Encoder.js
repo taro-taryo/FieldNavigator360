@@ -58,21 +58,38 @@ export default class Encoder {
     }
 
     processNALUnits(data) {
-        const units = this.splitNALUnits(data);
-        units.forEach((unit) => {
-            const nalType = unit[0] & 0x1f;
-
-            if (nalType === 7) {
-                this.sps = unit;
-            } else if (nalType === 8) {
-                this.pps = unit;
-            } else if (nalType === 5) {
-                this.storeEncodedFrame(this.concatNALUnits([this.sps, this.pps, unit]));
-            } else if (nalType === 1) {
-                this.storeEncodedFrame(unit);
+        const nalUnits = this.splitNALUnits(data);
+    
+        for (const nalUnit of nalUnits) {
+            const nalType = nalUnit[0] & 0x1f;
+    
+            switch (nalType) {
+                case 7: // SPS
+                    this.sps = nalUnit;
+                    console.log('SPS updated.');
+                    break;
+                case 8: // PPS
+                    this.pps = nalUnit;
+                    console.log('PPS updated.');
+                    break;
+                case 5: // IDR
+                    this.storeEncodedFrame(this.concatNALUnits([this.sps, this.pps, nalUnit]));
+                    break;
+                case 1: // nonIDR
+                    // 非IDRフレームにもSPS/PPSを強制的に付与
+                    if (this.sps && this.pps) {
+                        this.storeEncodedFrame(this.concatNALUnits([this.sps, this.pps, nalUnit]));
+                    } else {
+                        console.warn('Skipping nonIDR frame due to missing SPS/PPS');
+                    }
+                    break;
+                default:
+                    console.log('Discarded non-relevant NAL unit:', nalType);
+                    break;
             }
-        });
+        }
     }
+    
 
     splitNALUnits(data) {
         const units = [];

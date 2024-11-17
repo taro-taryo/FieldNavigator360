@@ -18,6 +18,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let videoWidth = 0;
     let videoHeight = 0;
 
+    let framesDecoded = 0; // デコーダーが処理したフレーム数
+    let framesReceived = 0; // WebSocketで受信したフレーム数
+    let framesDropped = 0; // デコーダーが処理できなかったフレーム数
+    let frameQueue = []; // デコード待ちのフレームキュー
+
     function initializeDecoder() {
         decoder = new VideoDecoder({
             output: processDecodedFrame,
@@ -29,14 +34,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function processDecodedFrame(frame) {
-        if (frame.displayWidth !== videoWidth || frame.displayHeight !== videoHeight) {
-            videoWidth = frame.displayWidth;
-            videoHeight = frame.displayHeight;
-            updateCanvasSize(videoWidth, videoHeight);
+        framesDecoded++;
+        const totalStart = performance.now();
+
+        try {
+            if (frame.displayWidth !== videoWidth || frame.displayHeight !== videoHeight) {
+                videoWidth = frame.displayWidth;
+                videoHeight = frame.displayHeight;
+                updateCanvasSize(videoWidth, videoHeight);
+            }
+
+            const drawStart = performance.now();
+            ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
+            frame.close();
+            console.log(`[Operator] Frame drawn in ${(performance.now() - drawStart).toFixed(2)} ms`);
+        } catch (error) {
+            console.error('[Operator] Error processing decoded frame:', error);
         }
 
-        ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
-        frame.close();
+        const totalDuration = performance.now() - totalStart;
+        console.log(`[Operator] Total frame processing time: ${totalDuration.toFixed(2)} ms`);
     }
 
     function updateCanvasSize(width, height) {
@@ -46,21 +63,41 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleBinaryData(data) {
-        if (!decoder || decoder.state !== 'configured') {
-            console.warn('[Operator] Decoder not ready. Frame discarded.');
+        framesReceived++;
+
+        if (decoder.decodeQueueSize > 5) {
+            framesDropped++;
+            console.warn('[Operator] Decoder queue is full, dropping frame.');
             return;
         }
 
+        frameQueue.push(data);
+        processFrameQueue();
+    }
+
+    function processFrameQueue() {
+        if (frameQueue.length === 0 || decoder.decodeQueueSize >= 5) {
+            return;
+        }
+
+        const data = frameQueue.shift();
         const chunkType = isKeyFrame(data) ? 'key' : 'delta';
         console.log(`[Operator] Decoding ${chunkType} frame.`);
 
-        decoder.decode(
-            new EncodedVideoChunk({
-                type: chunkType,
-                timestamp: performance.now(),
-                data,
-            })
-        );
+        try {
+            decoder.decode(
+                new EncodedVideoChunk({
+                    type: chunkType,
+                    timestamp: performance.now(),
+                    data,
+                })
+            );
+        } catch (error) {
+            console.error('[Operator] Error decoding video chunk:', error);
+        }
+
+        // キューに残りがあれば再帰的に処理
+        setTimeout(processFrameQueue, 0);
     }
 
     function isKeyFrame(data) {
@@ -96,7 +133,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     canvas.addEventListener('mousedown', sendPointer);
     canvas.addEventListener('mousemove', sendPointer);
-
     const wsManager = new WebSocketManager(`wss://${location.host}`, 'operator', (data) => {
         if (data instanceof Uint8Array) {
             handleBinaryData(data);
@@ -104,6 +140,13 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('[Operator] Text message received:', data);
         }
     });
+
+    // 定期的に統計情報を表示
+    setInterval(() => {
+        console.log(
+            `[Operator Stats] Frames received: ${framesReceived}, Frames decoded: ${framesDecoded}, Frames dropped: ${framesDropped}`
+        );
+    }, 5000);
 
     initializeDecoder();
     console.log('[Operator] Operator initialized');
