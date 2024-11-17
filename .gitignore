@@ -1,0 +1,10 @@
+### macOS ###
+# General
+.DS_Store
+.AppleDouble
+.LSOverride
+
+node_modules
+server/distribution
+server/ssl
+tmp
