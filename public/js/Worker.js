@@ -16,6 +16,7 @@ class Worker {
     }
 
     init() {
+        this.wsManager = this.setupWebSocket(); // WebSocketの初期化を先行
         this.startButton.addEventListener('click', () => this.startCamera());
     }
 
@@ -23,7 +24,6 @@ class Worker {
         try {
             const stream = await this.initializeCameraStream();
             this.setupCanvas(stream);
-            this.wsManager = this.setupWebSocket();
             this.encoder = this.setupEncoder();
             this.pointerManager = new PointerManager(this.video, this.pointer);
 
@@ -65,14 +65,22 @@ class Worker {
     }
 
     setupEncoder() {
-        const encoder = new Encoder(this.canvas, this.video, this.wsManager.ws);
+        const encoder = new Encoder(this.canvas, this.video);
         encoder.configure(this.canvas.width, this.canvas.height, 5000000, 30);
         return encoder;
     }
 
     startProcessingFrames() {
         const process = () => {
-            this.encoder.processFrame();
+            const frames = this.encoder.processFrame();
+            frames.forEach((frame) => {
+                if (this.wsManager.ws.readyState === WebSocket.OPEN) {
+                    this.wsManager.ws.send(frame);
+                } else {
+                    console.warn('WebSocket not ready. Frame dropped.');
+                }
+            });
+
             requestAnimationFrame(process);
         };
         process();

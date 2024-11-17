@@ -1,29 +1,66 @@
 import WebSocketManager from './WebSocketManager.js';
 
 document.addEventListener('DOMContentLoaded', () => {
-    const video = document.getElementById('camera');
+    const canvas = document.getElementById('camera');
+    const ctx = canvas.getContext('2d');
+
+    let decoder;
+
+    // WebCodecs 用のデコーダを初期化
+    function initializeDecoder() {
+        decoder = new VideoDecoder({
+            output: (frame) => {
+                // Canvas にフレームを描画
+                ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
+                frame.close();
+            },
+            error: (err) => console.error('Decoder error:', err),
+        });
+
+        decoder.configure({
+            codec: 'avc1.42E01E', // H.264
+        });
+
+        console.log('Decoder initialized.');
+    }
 
     // WebSocketManager インスタンスを初期化
     const wsManager = new WebSocketManager(`wss://${location.host}`, 'operator', (data) => {
-        console.log('Message received by operator:', data);
+        if (data instanceof Uint8Array) {
+            handleBinaryData(data);
+        } else {
+            console.log('Message received by operator:', data);
+        }
     });
 
-    // video 要素にクリックイベントを追加
-    video.addEventListener('click', (event) => {
-        const rect = video.getBoundingClientRect();
-        const x = (event.clientX - rect.left) / rect.width; // 正規化 x 座標
-        const y = (event.clientY - rect.top) / rect.height; // 正規化 y 座標
+    function handleBinaryData(data) {
+        if (!decoder || decoder.state !== 'configured') {
+            console.warn('Decoder not ready. Discarding frame.');
+            return;
+        }
 
-        // pointer メッセージを WebSocket 経由で送信
-        wsManager.send({
-            type: 'pointer',
-            role: 'operator',
-            x,
-            y,
-        });
+        try {
+            const chunkType = isKeyFrame(data) ? 'key' : 'delta';
 
-        console.log(`Pointer sent: x=${x}, y=${y}`);
-    });
+            decoder.decode(
+                new EncodedVideoChunk({
+                    type: chunkType,
+                    timestamp: performance.now(), // 適切なタイムスタンプを提供
+                    data,
+                })
+            );
+        } catch (error) {
+            console.error('Error decoding video chunk:', error);
+        }
+    }
+
+    function isKeyFrame(data) {
+        const nalType = data[4] & 0x1f;
+        return nalType === 5; // IDR フレームかどうかを確認
+    }
+
+    // 初期化
+    initializeDecoder();
 
     console.log('Operator initialized');
 });

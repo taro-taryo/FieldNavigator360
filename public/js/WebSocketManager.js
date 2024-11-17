@@ -9,9 +9,18 @@ export default class WebSocketManager {
         });
 
         if (onMessage) {
-            this.ws.addEventListener('message', (event) => {
-                const data = this.parseMessage(event.data);
-                if (data) onMessage(data);
+            this.ws.addEventListener('message', async (event) => {
+                if (typeof event.data === 'string') {
+                    // テキストメッセージの場合
+                    const data = this.parseMessage(event.data);
+                    if (data) onMessage(data);
+                } else if (event.data instanceof Blob) {
+                    // バイナリメッセージの場合
+                    const buffer = await event.data.arrayBuffer();
+                    onMessage(new Uint8Array(buffer));
+                } else {
+                    console.error('Unsupported WebSocket message type:', event.data);
+                }
             });
         }
     }
