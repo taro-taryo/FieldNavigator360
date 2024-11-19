@@ -33,7 +33,10 @@ class Worker {
     async startCamera() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'environment' },
+                video: {
+                    facingMode: 'environment',
+                    frameRate: 10,
+                },
                 audio: false,
             });
 
@@ -82,7 +85,12 @@ class Worker {
     }
 
     startProcessingFrames() {
-        const process = () => {
+        if (!this.video || !this.encoder) {
+            console.error('[Worker] Video or Encoder is not initialized.');
+            return;
+        }
+
+        const processFrame = (now, metadata) => {
             const frames = this.encoder.processFrameWithPointer(this.pointerPosition, this.video);
             frames.forEach((frame) => {
                 if (this.wsManager.ws.readyState === WebSocket.OPEN) {
@@ -92,10 +100,15 @@ class Worker {
                 }
             });
 
-            requestAnimationFrame(process);
+            // 次のフレーム更新のコールバックを登録
+            this.video.requestVideoFrameCallback(processFrame);
         };
-        process();
+
+        // 初回のコールバック登録
+        this.video.requestVideoFrameCallback(processFrame);
     }
+
+
 
     handleResize() {
         const newOrientation = this.getOrientation();
