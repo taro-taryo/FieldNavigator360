@@ -19,7 +19,7 @@ export default class DecoderManager {
             error: (error) => console.error('[DecoderManager] Decoder error:', error),
         });
 
-        this.decoder.configure({ codec: 'avc1.42E01E' });
+        this.decoder.configure({ codec: 'avc1.42E034' });
         console.log('[DecoderManager] Decoder initialized');
     }
 
