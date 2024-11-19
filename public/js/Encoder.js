@@ -23,7 +23,7 @@ export default class Encoder {
 
     configure(width, height, bitrate, framerate) {
         this.encoder.configure({
-            codec: 'avc1.42E01E',
+            codec: 'avc1.42E034',
             width,
             height,
             bitrate,
